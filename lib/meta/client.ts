@@ -718,7 +718,20 @@ export async function getLongLivedToken(
   url.searchParams.set("access_token", shortLivedToken);
 
   const response = await fetch(url.toString());
-  const data = await handleResponse<TokenResponse>(response);
+  const raw = await response.text();
+  let data: TokenResponse;
+  try {
+    data = JSON.parse(raw) as TokenResponse;
+  } catch {
+    throw new Error(
+      `LL-token non-JSON host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} body=${raw.slice(0, 160)}`
+    );
+  }
+  if (!response.ok || !data.access_token) {
+    throw new Error(
+      `LL-token fail host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} body=${raw.slice(0, 200)}`
+    );
+  }
 
   return {
     accessToken: data.access_token,

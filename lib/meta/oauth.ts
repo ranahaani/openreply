@@ -108,9 +108,21 @@ export async function exchangeCodeForToken(
   }
 
   const data = await response.json();
+  // Instagram Business Login returns the short-lived token either flat
+  // ({ access_token, user_id }) or wrapped ({ data: [{ access_token, ... }] }).
+  // Reading the flat shape blindly yields an undefined token, which later
+  // surfaces as an opaque "Unsupported request" error on the long-lived
+  // exchange. Support both shapes.
+  const tokenData = Array.isArray(data?.data) ? data.data[0] : data;
+  const accessToken = tokenData?.access_token;
+  if (!accessToken) {
+    throw new Error(
+      `Token exchange returned no access_token: ${JSON.stringify(data).slice(0, 200)}`
+    );
+  }
   return {
-    accessToken: data.access_token,
-    userId: String(data.user_id),
+    accessToken,
+    userId: String(tokenData.user_id),
   };
 }
 
