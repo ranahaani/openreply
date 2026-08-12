@@ -4,6 +4,11 @@ function instagramGraphBase() {
   return `https://graph.instagram.com/${getMetaGraphApiVersion()}`;
 }
 
+// Instagram's OAuth token endpoints (access_token, refresh_access_token) are
+// unversioned. Hitting the versioned path returns "Unsupported request -
+// method type: get", so keep these off the versioned base.
+const INSTAGRAM_OAUTH_BASE = "https://graph.instagram.com";
+
 function facebookGraphBase() {
   return `https://graph.facebook.com/${getMetaGraphApiVersion()}`;
 }
@@ -707,7 +712,7 @@ export async function getFollowerCountSeries(
 export async function getLongLivedToken(
   shortLivedToken: string
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  const url = new URL(`${instagramGraphBase()}/access_token`);
+  const url = new URL(`${INSTAGRAM_OAUTH_BASE}/access_token`);
   url.searchParams.set("grant_type", "ig_exchange_token");
   url.searchParams.set("client_secret", requireEnv("INSTAGRAM_APP_SECRET"));
   url.searchParams.set("access_token", shortLivedToken);
@@ -724,7 +729,7 @@ export async function getLongLivedToken(
 export async function refreshLongLivedToken(
   longLivedToken: string
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  const url = new URL(`${instagramGraphBase()}/refresh_access_token`);
+  const url = new URL(`${INSTAGRAM_OAUTH_BASE}/refresh_access_token`);
   url.searchParams.set("grant_type", "ig_refresh_token");
   url.searchParams.set("access_token", longLivedToken);
 
