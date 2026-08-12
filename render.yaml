@@ -1,0 +1,49 @@
+# Render Blueprint — single free web service runs BOTH the Next.js app and the
+# BullMQ worker (Render's dedicated worker type is paid). Redis is a free Render
+# Key Value instance. Postgres is external (Neon free tier) via DATABASE_URL.
+services:
+  - type: web
+    name: openreply
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install && npm run build && npm run db:migrate
+    startCommand: sh render-start.sh
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: META_GRAPH_API_VERSION
+        value: v25.0
+      - key: INSTAGRAM_APP_ID
+        value: "2482701242228930"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: openreply-kv
+          property: connectionString
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+
+  - type: keyvalue
+    name: openreply-kv
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
