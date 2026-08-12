@@ -728,8 +728,34 @@ export async function getLongLivedToken(
     );
   }
   if (!response.ok || !data.access_token) {
+    const prefix = (shortLivedToken ?? "").slice(0, 6);
+    const clean = /^[A-Za-z0-9._-]+$/.test(shortLivedToken ?? "");
+    // One-shot probe of alternative exchange endpoints so a single failed
+    // connect reveals which host/path Meta actually accepts for this token.
+    const probes: string[] = [];
+    const secret = requireEnv("INSTAGRAM_APP_SECRET");
+    const ver = getMetaGraphApiVersion();
+    const candidates: { label: string; u: string }[] = [
+      {
+        label: "ig-versioned",
+        u: `https://graph.instagram.com/${ver}/access_token?grant_type=ig_exchange_token&client_secret=${secret}&access_token=${encodeURIComponent(shortLivedToken)}`,
+      },
+      {
+        label: "fb-exchange",
+        u: `https://graph.facebook.com/${ver}/oauth/access_token?grant_type=fb_exchange_token&client_id=${requireEnv("INSTAGRAM_APP_ID")}&client_secret=${secret}&fb_exchange_token=${encodeURIComponent(shortLivedToken)}`,
+      },
+    ];
+    for (const c of candidates) {
+      try {
+        const pr = await fetch(c.u);
+        const pb = await pr.text();
+        probes.push(`${c.label}:${pr.status}:${pb.slice(0, 90)}`);
+      } catch (e) {
+        probes.push(`${c.label}:ERR:${e instanceof Error ? e.message : "?"}`);
+      }
+    }
     throw new Error(
-      `LL-token fail host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} body=${raw.slice(0, 200)}`
+      `LL-token fail host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} tokenPrefix=${prefix} tokenClean=${clean} body=${raw.slice(0, 120)} || ${probes.join(" || ")}`
     );
   }
 

@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       `${baseUrl}/settings?instagram=failed&step=${encodeURIComponent(
         step
-      )}&reason=${encodeURIComponent(message.slice(0, 200))}`
+      )}&reason=${encodeURIComponent(message.slice(0, 600))}`
     );
   }
 }
