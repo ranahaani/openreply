@@ -718,53 +718,7 @@ export async function getLongLivedToken(
   url.searchParams.set("access_token", shortLivedToken);
 
   const response = await fetch(url.toString());
-  const raw = await response.text();
-  let data: TokenResponse;
-  try {
-    data = JSON.parse(raw) as TokenResponse;
-  } catch {
-    throw new Error(
-      `LL-token non-JSON host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} body=${raw.slice(0, 160)}`
-    );
-  }
-  if (!response.ok || !data.access_token) {
-    const prefix = (shortLivedToken ?? "").slice(0, 6);
-    const clean = /^[A-Za-z0-9._-]+$/.test(shortLivedToken ?? "");
-    // One-shot probe of alternative exchange endpoints so a single failed
-    // connect reveals which host/path Meta actually accepts for this token.
-    const probes: string[] = [];
-    const secret = requireEnv("INSTAGRAM_APP_SECRET");
-    const ver = getMetaGraphApiVersion();
-    const tok = encodeURIComponent(shortLivedToken);
-    // P1: is the token valid for a normal API call?
-    try {
-      const pr = await fetch(
-        `https://graph.instagram.com/me?fields=id,username,user_id&access_token=${tok}`
-      );
-      probes.push(`me:${pr.status}:${(await pr.text()).slice(0, 90)}`);
-    } catch (e) {
-      probes.push(`me:ERR:${e instanceof Error ? e.message : "?"}`);
-    }
-    // P2: does the exchange accept POST with form body?
-    try {
-      const pr = await fetch(`${INSTAGRAM_OAUTH_BASE}/access_token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "ig_exchange_token",
-          client_secret: secret,
-          access_token: shortLivedToken,
-        }).toString(),
-      });
-      probes.push(`post:${pr.status}:${(await pr.text()).slice(0, 90)}`);
-    } catch (e) {
-      probes.push(`post:ERR:${e instanceof Error ? e.message : "?"}`);
-    }
-    void ver;
-    throw new Error(
-      `LL-token fail host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} tokenPrefix=${prefix} tokenClean=${clean} body=${raw.slice(0, 120)} || ${probes.join(" || ")}`
-    );
-  }
+  const data = await handleResponse<TokenResponse>(response);
 
   return {
     accessToken: data.access_token,
