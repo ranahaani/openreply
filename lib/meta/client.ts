@@ -735,25 +735,32 @@ export async function getLongLivedToken(
     const probes: string[] = [];
     const secret = requireEnv("INSTAGRAM_APP_SECRET");
     const ver = getMetaGraphApiVersion();
-    const candidates: { label: string; u: string }[] = [
-      {
-        label: "ig-versioned",
-        u: `https://graph.instagram.com/${ver}/access_token?grant_type=ig_exchange_token&client_secret=${secret}&access_token=${encodeURIComponent(shortLivedToken)}`,
-      },
-      {
-        label: "fb-exchange",
-        u: `https://graph.facebook.com/${ver}/oauth/access_token?grant_type=fb_exchange_token&client_id=${requireEnv("INSTAGRAM_APP_ID")}&client_secret=${secret}&fb_exchange_token=${encodeURIComponent(shortLivedToken)}`,
-      },
-    ];
-    for (const c of candidates) {
-      try {
-        const pr = await fetch(c.u);
-        const pb = await pr.text();
-        probes.push(`${c.label}:${pr.status}:${pb.slice(0, 90)}`);
-      } catch (e) {
-        probes.push(`${c.label}:ERR:${e instanceof Error ? e.message : "?"}`);
-      }
+    const tok = encodeURIComponent(shortLivedToken);
+    // P1: is the token valid for a normal API call?
+    try {
+      const pr = await fetch(
+        `https://graph.instagram.com/me?fields=id,username,user_id&access_token=${tok}`
+      );
+      probes.push(`me:${pr.status}:${(await pr.text()).slice(0, 90)}`);
+    } catch (e) {
+      probes.push(`me:ERR:${e instanceof Error ? e.message : "?"}`);
     }
+    // P2: does the exchange accept POST with form body?
+    try {
+      const pr = await fetch(`${INSTAGRAM_OAUTH_BASE}/access_token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "ig_exchange_token",
+          client_secret: secret,
+          access_token: shortLivedToken,
+        }).toString(),
+      });
+      probes.push(`post:${pr.status}:${(await pr.text()).slice(0, 90)}`);
+    } catch (e) {
+      probes.push(`post:ERR:${e instanceof Error ? e.message : "?"}`);
+    }
+    void ver;
     throw new Error(
       `LL-token fail host=${url.host} path=${url.pathname} status=${response.status} tokenLen=${shortLivedToken?.length ?? 0} tokenPrefix=${prefix} tokenClean=${clean} body=${raw.slice(0, 120)} || ${probes.join(" || ")}`
     );
