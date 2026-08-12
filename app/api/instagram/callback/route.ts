@@ -41,15 +41,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/settings?instagram=forbidden`);
   }
 
+  let step = "start";
   try {
     const redirectUri = `${baseUrl}/api/instagram/callback`;
+    step = "exchangeCodeForToken";
     const { accessToken: shortLivedToken } = await exchangeCodeForToken(
       code,
       redirectUri
     );
+    step = "getLongLivedToken";
     const { accessToken: longLivedToken, expiresIn } =
       await getLongLivedToken(shortLivedToken);
+    step = "getUserInfo";
     const userInfo = await getUserInfo(longLivedToken);
+    step = "afterUserInfo";
     // Webhooks and the messaging API key off the professional account ID
     // (user_id), not the app-scoped `id`. Store user_id so comment webhooks
     // can be matched back to this account. Fall back to id if user_id is
@@ -118,15 +123,15 @@ export async function GET(request: NextRequest) {
           level: "ERROR",
           workspaceId: state.workspaceId,
           message: "Instagram connection failed",
-          payload: { reason: message },
+          payload: { reason: message, step },
         },
       })
       .catch(() => {});
 
     return NextResponse.redirect(
-      `${baseUrl}/settings?instagram=failed&reason=${encodeURIComponent(
-        message.slice(0, 200)
-      )}`
+      `${baseUrl}/settings?instagram=failed&step=${encodeURIComponent(
+        step
+      )}&reason=${encodeURIComponent(message.slice(0, 200))}`
     );
   }
 }
