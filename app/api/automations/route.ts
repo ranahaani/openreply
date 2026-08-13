@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
+import { getApiKeyWorkspace } from "@/lib/api-key-auth";
 import { prisma } from "@/lib/db/client";
 import { calculateCtr, normalizeTopKeywords } from "@/lib/tracking/analytics";
 import { buildTrackedUrl } from "@/lib/tracking/message";
@@ -276,22 +277,26 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Session (dashboard) auth first; fall back to bearer-key auth for
+  // programmatic callers like the reel-studio campaign script.
   const context = await getCurrentWorkspaceContext();
-  if (!context) {
+  const apiKeyContext = context ? null : await getApiKeyWorkspace(request);
+
+  if (!context && !apiKeyContext) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
     );
   }
 
-  if (!canManageWorkspace(context.role)) {
+  if (context && !canManageWorkspace(context.role)) {
     return NextResponse.json(
       { success: false, error: "Only owners and admins can create campaigns" },
       { status: 403 }
     );
   }
 
-  const workspaceId = context.workspaceId;
+  const workspaceId = context?.workspaceId ?? apiKeyContext!.workspaceId;
 
   const body = await request.json();
   const parsed = createAutomationSchema.safeParse(body);
