@@ -232,9 +232,29 @@ async function sweepCampaign(
     });
     const handledSet = new Set(handled.map((h) => h.commentId));
 
+    // Cross-source dedup by COMMENTER. Instagram's webhook and the Graph API
+    // can return different comment ids for the SAME comment, so a comment
+    // already DM'd via webhook (its dmLog keyed by the webhook's comment id)
+    // does NOT match the commentId guard above and would get a second DM from
+    // the poll. The commenter's IGSID is stable across both sources, so for
+    // one-DM-per-person (DM-only) campaigns, skip any comment whose commenter
+    // already has a terminal dmLog for this campaign.
+    let handledCommenters = new Set<string>();
+    if (!automation.publicReplyEnabled) {
+      const byCommenter = await prisma.dmLog.findMany({
+        where: {
+          automationId: automation.id,
+          commenterId: { in: needsAction.map((c) => c.from!.id) },
+          status: { in: TERMINAL_STATUSES },
+        },
+        select: { commenterId: true },
+      });
+      handledCommenters = new Set(byCommenter.map((h) => h.commenterId));
+    }
+
     // Oldest first, so whoever commented earliest gets answered first, capped.
     const fresh = needsAction
-      .filter((c) => !handledSet.has(c.id))
+      .filter((c) => !handledSet.has(c.id) && !handledCommenters.has(c.from!.id))
       .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
       .slice(0, MAX_NEW_PER_SWEEP);
 
