@@ -707,21 +707,22 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
     return;
   }
 
-  // Duplicate sends are enabled: every button tap re-sends the reveal
-  // instead of only firing once per person.
+  // Deliver the reveal at most once per person. A button tap and a Meta
+  // webhook re-delivery (fresh mid → new job id, so BullMQ's job-level dedup
+  // doesn't catch it) would otherwise each re-send the link, DMing the user in
+  // a loop. The SENT dmLog for this user is the idempotency key on every path
+  // (tap and read-fallback alike).
   const dedupeId = `reveal:${userId}`;
 
-  if (fallback) {
-    const existingReveal = await prisma.dmLog.findUnique({
-      where: {
-        automationId_commentId: {
-          automationId: automation.id,
-          commentId: dedupeId,
-        },
+  const existingReveal = await prisma.dmLog.findUnique({
+    where: {
+      automationId_commentId: {
+        automationId: automation.id,
+        commentId: dedupeId,
       },
-    });
-    if (existingReveal?.status === "SENT") return;
-  }
+    },
+  });
+  if (existingReveal?.status === "SENT") return;
 
   // Personalize {username} from the opening DM log for this user, if present.
   const openingLog = await prisma.dmLog.findFirst({
