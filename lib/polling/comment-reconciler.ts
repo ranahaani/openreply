@@ -35,6 +35,7 @@ import {
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { matchKeywords } from "@/lib/utils/keyword-matcher";
+import { DmStatus } from "@/app/generated/prisma/client";
 
 // Only consider comments from the last few days — older ones are outside
 // Instagram's private-reply window anyway, so a DM to them would just fail.
@@ -213,7 +214,7 @@ async function sweepCampaign(
     // the worker (and, for comments still inside the window, the user) forever.
     // Transient deferrals (SKIPPED_RATE_LIMIT) are intentionally NOT terminal,
     // so they still come back on a later sweep once the limit clears.
-    const TERMINAL_STATUSES = ["SENT", "FAILED"];
+    const TERMINAL_STATUSES: DmStatus[] = [DmStatus.SENT, DmStatus.FAILED];
     const handled = await prisma.dmLog.findMany({
       where: {
         automationId: automation.id,
@@ -222,7 +223,7 @@ async function sweepCampaign(
           ? {
               OR: [
                 { publicReplySentAt: { not: null } },
-                { status: "FAILED" },
+                { status: DmStatus.FAILED },
               ],
             }
           : { status: { in: TERMINAL_STATUSES } }),
