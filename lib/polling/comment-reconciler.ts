@@ -206,13 +206,26 @@ async function sweepCampaign(
     // enough — the reply still has to land); otherwise a SENT DM is enough. This
     // is what lets a comment whose DM sent but whose public reply failed come
     // back and retry the reply.
+    // A comment is "handled" once it has reached a TERMINAL dmLog state, not
+    // only SENT. Instagram allows one private reply per comment and only within
+    // a 24h window, so a FAILED send (window closed, reply already consumed)
+    // can never succeed on retry — re-enqueuing it every sweep just re-spams
+    // the worker (and, for comments still inside the window, the user) forever.
+    // Transient deferrals (SKIPPED_RATE_LIMIT) are intentionally NOT terminal,
+    // so they still come back on a later sweep once the limit clears.
+    const TERMINAL_STATUSES = ["SENT", "FAILED"];
     const handled = await prisma.dmLog.findMany({
       where: {
         automationId: automation.id,
         commentId: { in: needsAction.map((c) => c.id) },
         ...(automation.publicReplyEnabled
-          ? { publicReplySentAt: { not: null } }
-          : { status: "SENT" }),
+          ? {
+              OR: [
+                { publicReplySentAt: { not: null } },
+                { status: "FAILED" },
+              ],
+            }
+          : { status: { in: TERMINAL_STATUSES } }),
       },
       select: { commentId: true },
     });
